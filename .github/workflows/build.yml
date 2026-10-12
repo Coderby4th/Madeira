@@ -1,0 +1,46 @@
+name: Build Madeira with VC Redist
+
+on:
+  workflow_dispatch: # Allows you to manually trigger the build via a button
+
+jobs:
+  build:
+    runs-on: macos-14 # Uses Apple Silicon M1/M2 runners required for Xcode builds
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      - name: Download and Bundle VC Runtime
+        run: |
+          chmod +x tools/fetch-vcruntime.sh
+          ./tools/fetch-vcruntime.sh
+
+      - name: Install Dependencies & Build IPA
+        run: |
+          # Runs standard build commands provided by Madeira's make/cmake configs
+          # This compiles the app and packages it into a payload folder
+          mkdir -p build
+          cd build
+          cmake .. -G Xcode -DCMAKE_SYSTEM_NAME=iOS
+          xcodebuild -configuration Release -sdk iphoneos
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          # Moves the compiled app bundle into the Payload folder for ZIP packaging
+          cp -r build/Release-iphoneos/Madeira.app Payload/
+          zip -r Madeira_VC.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Madeira-Precompiled-With-VC
+          path: Madeira_VC.ipa
+          retention-days: 5
